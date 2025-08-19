@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE settings
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# ChromaDB persistence
+chromadb_npc/
+*.duckdb
+*.parquet
+
+# Output files
+outputs/
+*.jpg
+*.png
+*.txt
+
+# Jupyter (if used)
+.ipynb_checkpoints/
+
+# Backup / temp files
+*.bak
+*.tmp
+*.swp
