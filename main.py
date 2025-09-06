@@ -1,72 +1,113 @@
-import chromadb
-import random
-from chromadb.utils import embedding_functions
+# This is the main game loop for the text-based NPC game.
+# It handles player movement, proximity checks, and user interaction.
 
-# Embedding setup
-embedding_func = embedding_functions.SentenceTransformerEmbeddingFunction(
-    model_name="all-MiniLM-L6-v2"
-)
+import sys
+from dialogues import initialize_chromadb, get_dialogue
 
-client = chromadb.PersistentClient(path="./chromadb_npc")
-collection = client.get_collection(name="npc_dialogues", embedding_function=embedding_func)
+# --- Game Entities ---
+# Player class to manage state.
+class Player:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.reputation = 0 # Default reputation
 
-# Map user input keywords to subcategories
-keyword_map = {
-    "hi": ("core_interactions", "greeting"),
-    "hello": ("core_interactions", "greeting"),
-    "hey": ("core_interactions", "greeting"),
-    "trade": ("core_interactions", "trade"),
-    "barter": ("core_interactions", "trade"),
-    "craft": ("core_interactions", "trade"),
-    "talk": ("core_interactions", "small_talk"),
-    "gossip": ("core_interactions", "small_talk"),
-    "quest": ("core_interactions", "quests"),
-    "mission": ("core_interactions", "quests"),
-    "bye": ("core_interactions", "farewell"),
-    "farewell": ("core_interactions", "farewell"),
-    "goodbye": ("core_interactions", "farewell"),
-    "reward": ("ambient", "reward_greeting"),
-    "whistle": ("ambient", "whistling_singing"),
-    "sing": ("ambient", "whistling_singing"),
-    "routine": ("ambient", "personal_routines"),
-    "damage": ("special_interactions", "damaged_crops"),
-    "steal": ("special_interactions", "stealing"),
-    "mock": ("special_interactions", "mocking"),
-    "help": ("special_interactions", "helped"),
+    def update_reputation(self, amount):
+        """Updates the player's reputation based on their actions."""
+        self.reputation += amount
+        print(f"[STATUS] Your reputation has changed by {amount}. Your new reputation is: {self.reputation}")
+
+# NPC is represented as a simple dictionary.
+npc = {"x": 50, "y": 50, "name": "Farmer Bob"}
+is_near_npc = False
+
+# Initialize the player object.
+player = Player(x=0, y=0)
+
+# Define reputation changes for different actions.
+REPUTATION_CHANGES = {
+    "greeting": 1,
+    "trade": 2,
+    "small_talk": 1,
+    "quests": 5,
+    "farewell": 1,
+    "damaged_crops": -10,
+    "stealing": -15,
+    "mocking": -5,
+    "helped": 10,
+    "lost_battle": 0
 }
 
-print("🤖 NPC is ready! (type 'exit' to quit)\n")
-
-while True:
-    user_input = input("You: ").strip().lower()
-
-    # Exit condition
-    if user_input in ["exit", "quit"]:
-        print("🤖 NPC says: Farewell, traveler!")
-        break
-
-    matched = None
-    for keyword, (cat, subcat) in keyword_map.items():
-        if keyword in user_input:
-            matched = (cat, subcat)
-            break
-
-    if matched:
-        cat, subcat = matched
-        results = collection.query(
-            query_texts=["npc line"],  # dummy query
-            where={
-                "$and": [
-                    {"category": cat},
-                    {"subcategory": subcat}
-                ]
-            },
-            n_results=20
-        )
-        responses = results["documents"][0]
-        if responses:
-            print("🤖 NPC says:", random.choice(responses))
-        else:
-            print("🤖 NPC says: (no lines found in DB)")
+# --- Game Functions ---
+def check_proximity():
+    """Simulates checking if the player is near the NPC."""
+    global is_near_npc
+    distance = ((player.x - npc['x'])**2 + (player.y - npc['y'])**2)**0.5
+    if distance < 10:
+        if not is_near_npc:
+            print(f"You have approached {npc['name']}!")
+            is_near_npc = True
     else:
-        print("🤖 NPC says: I don’t understand that yet.")
+        is_near_npc = False
+
+# --- Main Game Loop ---
+def main():
+    print("Welcome to the text-based NPC game.")
+    print(f"You are at coordinates ({player.x}, {player.y}). Farmer Bob is at ({npc['x']}, {npc['y']}).")
+    print("Type 'move [direction]' (e.g., 'move north') or 'interact' to begin.")
+    print("---")
+    
+    # Initialize the ChromaDB collection
+    dialogue_collection = initialize_chromadb()
+
+    while True:
+        check_proximity()
+        user_input = input("> ").strip().lower().split()
+        
+        command = user_input[0] if user_input else ""
+        
+        if command == "move":
+            direction = user_input[1] if len(user_input) > 1 else ""
+            if direction == "north": player.y += 5
+            elif direction == "south": player.y -= 5
+            elif direction == "east": player.x += 5
+            elif direction == "west": player.x -= 5
+            print(f"You moved. Your new position is ({player.x}, {player.y}).")
+            
+        elif command == "interact":
+            if is_near_npc:
+                print(f"You start a conversation with {npc['name']}.")
+                print("Choose an interaction:")
+                print("1. Greet (e.g., 'greeting')")
+                print("2. Trade (e.g., 'trade')")
+                print("3. Small Talk (e.g., 'small_talk')")
+                print("4. Quests (e.g., 'quests')")
+                print("5. Farewell (e.g., 'farewell')")
+                print("6. Special Interaction (e.g., 'lost_battle' or 'damaged_crops')")
+                
+                choice = input("Your choice: ").strip().lower()
+
+                # Get the dialogue from the dialogue module
+                response = get_dialogue(dialogue_collection, choice)
+                print(f"{npc['name']}: {response}")
+
+                # Update player reputation after the interaction
+                if choice in REPUTATION_CHANGES:
+                    player.update_reputation(REPUTATION_CHANGES[choice])
+                
+            else:
+                print("You are not close enough to anyone to interact.")
+
+        elif command == "status":
+            print(f"Your current position is ({player.x}, {player.y}).")
+            print(f"Your current reputation is: {player.reputation}")
+
+        elif command == "exit":
+            print("Thanks for playing!")
+            sys.exit(0)
+        
+        else:
+            print("Invalid command. Try 'move [direction]', 'interact', or 'status'.")
+
+if __name__ == "__main__":
+    main()
